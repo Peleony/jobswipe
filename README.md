@@ -1,6 +1,6 @@
 # JobSwipe
 
-**Mniej szumu. Więcej pracy.** JobSwipe to otwarty agregator ofert dla studentów i osób na początku kariery. Oferty odkrywa się gestem, a filtry, zapisane ogłoszenia, historia pominięć i Master CV pozostają w przeglądarce — bez konta, analityki, synchronizacji ani połączeń z modelami AI.
+**Mniej szumu. Więcej pracy.** JobSwipe to otwarty agregator ofert dla studentów i osób na osób szukających swojej pierwszej pracy. Aplikacja pomaga w selekcji i wyborze ofert pracy dla osob które nie mają wyspecjalizowanych umiejętności i do tej pory musiały scrollować całe portale mając do dyspozycji jedynie filtr "bez doświadczenia" i ciągle powtarzające się niechciane oferty.
 
 > **Prawdziwe oferty:** ustaw własny `JOOBLE_API_KEY`. Bez klucza aplikacja może pokazywać oznaczone przykłady demo. Aby całkowicie wyłączyć przykłady także bez klucza, ustaw `DEMO_DATA=false`.
 
