@@ -22,12 +22,11 @@ const BARRIERS = [
 
 const CITIES = ['Kraków', 'Warszawa', 'Wrocław']
 
-function FilterGroup({ title, items, checked, onToggle, note }) {
+function FilterGroup({ title, items, checked, onToggle }) {
   return (
     <section className="filter-group">
       <div className="filter-group-heading">
         <h3>{title}</h3>
-        {note && <span>{note}</span>}
       </div>
       <div className="filter-options">
         {items.map((item) => {
@@ -129,9 +128,7 @@ export default function FilterDrawer({
       >
         <header className="drawer-header">
           <div>
-            <span className="eyebrow">USTAW PO SWOJEMU</span>
-            <h2 id="filter-title">Twój filtr na ściemę</h2>
-            <p>Ty decydujesz, co zostaje poza talią.</p>
+            <h2 id="filter-title">Filtry</h2>
           </div>
           <button ref={closeRef} className="icon-button" onClick={onClose} aria-label="Zamknij filtry">
             <X size={20} />
@@ -140,7 +137,7 @@ export default function FilterDrawer({
 
         <div className="drawer-content">
           <section className="filter-group">
-            <div className="filter-group-heading"><h3>Miasto</h3><span>możesz też wpisać własne</span></div>
+            <div className="filter-group-heading"><h3>Miasto</h3></div>
             <label className="city-input-wrap">
               <MapPin size={17} aria-hidden="true" />
               <span className="sr-only">Filtruj po mieście</span>
@@ -166,7 +163,7 @@ export default function FilterDrawer({
           </section>
 
           <label className="salary-toggle">
-            <span className="toggle-copy"><strong>Pokazuj tylko oferty ze stawką</strong><small>Domyślnie ukrywamy niejasne wynagrodzenie.</small></span>
+            <span className="toggle-copy"><strong>Tylko oferty ze stawką</strong></span>
             <input
               type="checkbox"
               checked={draft.require_salary}
@@ -177,7 +174,6 @@ export default function FilterDrawer({
 
           <FilterGroup
             title="Branże poza talią"
-            note="nic nie blokujemy domyślnie"
             items={INDUSTRIES}
             checked={draft.blocked_industries}
             onToggle={(value) => toggle('blocked_industries', value)}
@@ -185,7 +181,6 @@ export default function FilterDrawer({
 
           <FilterGroup
             title="Wymagania poza talią"
-            note="możesz je odblokować"
             items={BARRIERS}
             checked={draft.blocked_tags}
             onToggle={(value) => toggle('blocked_tags', value)}

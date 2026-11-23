@@ -1,12 +1,18 @@
 services:
   backend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: backend/Dockerfile
     environment:
       DATABASE_PATH: /app/data/jobswipe.db
       JOOBLE_API_KEY: ${JOOBLE_API_KEY:-}
-      JOOBLE_API_BASE_URL: ${JOOBLE_API_BASE_URL:-https://jooble.org/api}
+      DEMO_DATA: ${DEMO_DATA:-auto}
+      JOOBLE_API_BASE_URL: ${JOOBLE_API_BASE_URL:-https://pl.jooble.org/api}
+      JOOBLE_DAILY_REQUEST_LIMIT: ${JOOBLE_DAILY_REQUEST_LIMIT:-90}
+      JOOBLE_REQUESTS_PER_REFRESH: ${JOOBLE_REQUESTS_PER_REFRESH:-20}
+      JOOBLE_KEYWORDS: ${JOOBLE_KEYWORDS:-praca}
+      JOOBLE_LOCATIONS: ${JOOBLE_LOCATIONS:-Kraków,Warszawa,Wrocław,Polska}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
     ports:
       - "8000:8000"
@@ -20,6 +26,7 @@ services:
       start_period: 10s
 
   frontend:
+    restart: unless-stopped
     build: ./frontend
     depends_on:
       backend:

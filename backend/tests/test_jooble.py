@@ -8,7 +8,8 @@ from backend.app.providers.base import ProviderError
 from backend.app.providers.jooble import JoobleProvider
 
 
-def test_jooble_maps_documented_fields_with_mock_transport() -> None:
+def test_jooble_maps_documented_fields_and_broad_searches_with_mock_transport(monkeypatch) -> None:
+    monkeypatch.delenv("JOOBLE_API_BASE_URL", raising=False)
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -40,15 +41,22 @@ def test_jooble_maps_documented_fields_with_mock_transport() -> None:
 
     jobs = asyncio.run(fetch())
 
-    assert len(requests) == 3
+    assert len(requests) == 4
     assert all(request.method == "POST" for request in requests)
-    assert all(str(request.url) == "https://jooble.org/api/test-key" for request in requests)
+    assert all(str(request.url) == "https://pl.jooble.org/api/test-key" for request in requests)
     assert [json.loads(request.content)["location"] for request in requests] == [
         "Kraków",
         "Warszawa",
         "Wrocław",
+        "Polska",
     ]
-    assert len(jobs) == 6
+    assert all(
+        json.loads(request.content)["keywords"] == "praca"
+        and json.loads(request.content)["page"] == "1"
+        and json.loads(request.content)["ResultOnPage"] == 20
+        for request in requests
+    )
+    assert len(jobs) == 8
     assert jobs[0].title == "Kelnerka"
     assert jobs[0].company == "Demo Bistro"
     assert jobs[0].city == "Kraków"

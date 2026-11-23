@@ -2,7 +2,7 @@
 
 **Mniej szumu. Więcej pracy.** JobSwipe to otwarty agregator ofert dla studentów i osób na początku kariery. Oferty odkrywa się gestem, a filtry, zapisane ogłoszenia, historia pominięć i Master CV pozostają w przeglądarce — bez konta, analityki, synchronizacji ani połączeń z modelami AI.
 
-> **Ważne: dane demo.** Po pierwszym uruchomieniu aplikacja lokalnie zasiewa bazę fikcyjnymi przykładami ofert. Są wyraźnie oznaczone jako „DEMO · DANE FIKCYJNE” i prowadzą do wyszukiwania, a nie do zmyślonych ogłoszeń. Prawdziwe oferty z Jooble są opcjonalne i wymagają własnego klucza API.
+> **Prawdziwe oferty:** ustaw własny `JOOBLE_API_KEY`. Bez klucza aplikacja może pokazywać oznaczone przykłady demo. Aby całkowicie wyłączyć przykłady także bez klucza, ustaw `DEMO_DATA=false`.
 
 ## Wymagania
 
@@ -21,9 +21,15 @@ python3.11 -m venv .venv
 .venv/bin/uvicorn --app-dir backend app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Backend-only dependencies can alternatively be installed with `.venv/bin/python -m pip install -r backend/requirements.txt`; the root requirements file includes this same pinned list.
+Zależności backendu można też zainstalować bezpośrednio z `backend/requirements.txt`; główny plik `requirements.txt` odsyła do tej samej listy. W PowerShell na Windows użyj `py -3.11 -m venv .venv` oraz `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`. Tym samym interpreterem uruchom `backend/seed.py` i `-m uvicorn --app-dir backend app.main:app --reload --host 127.0.0.1 --port 8000`.
 
-Pierwsze uruchomienie API samo zasieje przykładowe oferty w `backend/data/jobswipe.db`; osobne `seed.py` jest przydatne do ręcznego odświeżania. Ścieżka domyślna jest wyliczana względem aplikacji, nie bieżącego katalogu. Ustaw `DATABASE_PATH`, aby wskazać inną bazę.
+Aby pobierać prawdziwe oferty, wpisz `JOOBLE_API_KEY` ze swoim kluczem do pliku `.env` w katalogu głównym projektu (obok `docker-compose.yml`). Zarówno API, jak i `seed.py` odczytują ten plik niezależnie od katalogu uruchomienia; `backend/.env` uzupełnia brakujące wartości. Zmienne ustawione już w środowisku procesu mają pierwszeństwo. Nie udostępniaj pliku z kluczem. Po zmianie klucza uruchom API ponownie i kliknij **Odśwież** lub uruchom `seed.py`, jeśli baza zawiera już dane demo.
+
+API automatycznie pobiera oferty do pustej bazy `backend/data/jobswipe.db`; osobne `seed.py` jest przydatne do ręcznego odświeżania. Przy `DEMO_DATA=auto` (domyślnie) lub `DEMO_DATA=true` przykłady są dodawane tylko bez klucza Jooble. `DEMO_DATA=false` zawsze wyklucza przykłady. Gdy demo jest wyłączone, start API, odświeżanie i `seed.py` usuwają wcześniejsze przykłady z bazy, ale nie zmieniają kopii zapisanych wcześniej w przeglądarce.
+
+Każde ręczne odświeżenie pobiera następną, maksymalnie 20-zapytaniową partię Jooble; kolejne kliknięcia **Odśwież** kontynuują zapamiętane strony. JobSwipe ma konserwatywny lokalny limit 90 zapytań na klucz i dzień UTC (konfigurowalny do maksymalnie 100 zgodnie z darmowym limitem Jooble). To licznik tej bazy, nie obejmuje użycia klucza poza JobSwipe. Import nie ponawia automatycznie błędnych żądań; zachowuje działające strony i ponawia tę samą stronę przy kolejnym ręcznym odświeżeniu. HTTP 429 wstrzymuje import do północy UTC. Postęp i licznik są przechowywane w SQLite i przetrwają restart kontenera.
+
+Opcjonalny `DATABASE_PATH` może wskazywać inną bazę. Ścieżki względne, np. `data/moje-oferty.db`, są liczone od katalogu `backend/`, nie od bieżącego katalogu. Jeżeli lokalny `.env` zawiera `DATABASE_PATH=/app/data/jobswipe.db` ze starszego szablonu, usuń ten wpis: ścieżkę kontenerową ustawia sam Docker Compose.
 
 W drugim terminalu:
 
@@ -38,10 +44,12 @@ Otwórz adres Vite wypisany w terminalu (domyślnie `http://localhost:5173`). De
 ## Docker Compose
 
 ```sh
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 # Opcjonalnie dodaj do .env swój JOOBLE_API_KEY.
-docker compose up --build
+docker compose up -d --build
 ```
+
+Po pierwszym uruchomieniu oba kontenery startują ponownie razem z Docker Desktop, o ile nie zatrzymasz ich ręcznie.
 
 Frontend jest dostępny pod `http://localhost:8080`, API pod `http://localhost:8000`. Nginx serwuje SPA i proxy `/api` do backendu. SQLite jest przechowywany w nazwanym wolumenie `jobswipe_data`; odtworzenie kontenerów go nie usuwa. Klucz Jooble jest przekazywany wyłącznie do kontenera backendu. `.env` i lokalne bazy są ignorowane przez git.
 
@@ -66,9 +74,18 @@ Parametry: `city`, `require_salary`, wielokrotne `blocked_tags[]`, `blocked_indu
 curl 'http://127.0.0.1:8000/api/jobs?city=Warszawa&require_salary=true&blocked_tags%5B%5D=kat_d&blocked_tags%5B%5D=prowizja_scam&blocked_industries%5B%5D=transport&exclude_hashes%5B%5D=0123456789abcdef'
 ```
 
+### `POST /api/jobs/search`
+
+Wyszukiwanie tylko do odczytu z tymi samymi filtrami i limitem 50 ofert co `GET /api/jobs`. Interfejs wysyła listę wykluczonych identyfikatorów w JSON zamiast w adresie URL, dzięki czemu długa historia przesunięć nie blokuje pobierania kolejnych partii. Treść żądania nie zawiera CV ani zapisanych kopii ofert.
+
+```sh
+curl 'http://127.0.0.1:8000/api/jobs/search' -H 'Content-Type: application/json' \
+  -d '{"city":"Warszawa","require_salary":true,"blocked_tags":["kat_d"],"blocked_industries":["transport"],"exclude_hashes":["0123456789abcdef"]}'
+```
+
 ### `POST /api/jobs/refresh`
 
-Pobiera wyniki ze skonfigurowanych dostawców, czyści i deduplikuje je oraz wykonuje idempotentny upsert. JSON zwraca liczbę pobranych, dodanych i zaktualizowanych rekordów oraz bezpieczne komunikaty błędów dostawców. Nieudany dostawca nie kasuje istniejących ofert ani wyników innych źródeł.
+Pobiera wyniki ze skonfigurowanych dostawców, czyści i deduplikuje je oraz wykonuje idempotentny upsert. JSON zwraca `fetched` (poprawnie zmapowane wpisy), `inserted`, `updated`, łączną liczbę `total` w bazie oraz bezpieczne komunikaty błędów dostawców. Dla Jooble pole `jooble` zawiera liczbę odebranych wyników, zapytania tej partii i dzienny licznik, status oraz powód zatrzymania. Nieudany dostawca nie kasuje istniejących ofert ani wyników innych źródeł.
 
 ## Prywatność i ograniczenia
 
@@ -81,9 +98,11 @@ Pobiera wyniki ze skonfigurowanych dostawców, czyści i deduplikuje je oraz wyk
 
 ## Dostawcy ofert
 
-Interfejs `BaseJobProvider` znajduje się w `backend/app/providers/base.py`: asynchroniczne `fetch_jobs()` zwraca rekordy `RawJob`. `MockPLProvider` działa zawsze; `JoobleProvider` jest dodawany wyłącznie po ustawieniu `JOOBLE_API_KEY` w środowisku serwera. Dostawca Jooble wysyła zapytania POST dla Krakowa, Warszawy i Wrocławia, mapuje oficjalne pola odpowiedzi na `RawJob` i nie umieszcza klucza w odpowiedziach błędów API JobSwipe.
+Interfejs `BaseJobProvider` znajduje się w `backend/app/providers/base.py`: asynchroniczne `fetch_jobs()` zwraca rekordy `RawJob`. `JoobleProvider` działa po ustawieniu `JOOBLE_API_KEY` w środowisku serwera. `MockPLProvider` jest dostępny tylko bez klucza i tylko gdy demo nie jest wyłączone. Import Jooble rotuje stronami szerokiego zapytania `praca` dla Krakowa, Warszawy, Wrocławia i całej Polski. Lokalizacje, słowa kluczowe, limit na partię oraz lokalny budżet dzienny można zmienić przez `JOOBLE_LOCATIONS`, `JOOBLE_KEYWORDS`, `JOOBLE_REQUESTS_PER_REFRESH` i `JOOBLE_DAILY_REQUEST_LIMIT`. Domyślna partia wysyła maksymalnie 20 zapytań (do 400 wyników przed walidacją i deduplikacją); kolejne ręczne odświeżenia kontynuują zapisane strony zamiast wracać za każdym razem do pierwszej.
 
-Jooble dokumentuje ścieżkę `POST https://jooble.org/api/{api_Key}` wraz z parametrami JSON i polami odpowiedzi. Adapter domyślnie używa dokładnie tego endpointu; `JOOBLE_API_BASE_URL` pozwala go nadpisać, jeśli Jooble poda inny adres dla otrzymanego klucza. Integracja jest pokryta testami z `httpx.MockTransport`, ale nie została sprawdzona z prawdziwym kluczem.
+Oficjalna dokumentacja podaje darmowy limit 100 zapytań dziennie na klucz dla danego kraju, resetowany o północy UTC; JobSwipe domyślnie zatrzymuje się przy 90, pozostawiając bufor dla innych użyć klucza. Odpowiedź HTTP 429 wstrzymuje import do resetu. Pozostały limit raportowany przez aplikację dotyczy wyłącznie lokalnej bazy i może nie uwzględniać innych aplikacji używających tego samego klucza.
+
+Adapter domyślnie wysyła zapytania do polskiego endpointu `POST https://pl.jooble.org/api/{api_Key}` zgodnie z formatem żądania opisanym w dokumentacji REST Jooble. Jeśli w starszym `.env` masz ustawione `JOOBLE_API_BASE_URL=https://jooble.org/api`, usuń ten wpis lub zmień adres na `https://pl.jooble.org/api`. Zmienna nadal pozwala wskazać inny adres podany przez Jooble dla danego klucza. Testy integracji korzystają z `httpx.MockTransport`, bez prawdziwego klucza.
 
 - [Oficjalna dokumentacja REST API Jooble](https://help.jooble.org/en/support/solutions/articles/60001448238-rest-api-documentation)
 - [Oficjalny przewodnik podłączenia REST API Jooble](https://help.jooble.org/en/support/solutions/articles/60000922689-how-to-connect-to-the-jooble-rest-api)

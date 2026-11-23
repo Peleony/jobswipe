@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { animate, motion, useMotionValue, useTransform } from 'framer-motion'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { animate, motion, useDragControls, useMotionValue, useTransform } from 'framer-motion'
 import { ArrowUpRight, Building2, MapPin, X, Bookmark, FileText, ExternalLink } from 'lucide-react'
 import { safeExternalUrl } from '../utils/promptBuilder'
 
@@ -45,7 +45,9 @@ function JobDetails({ job, onClose }) {
     const dialog = dialogRef.current
     if (!dialog) return undefined
     dialog.showModal()
-    const close = () => onClose()
+    const close = () => {
+      if (!dialog.open) onClose()
+    }
     dialog.addEventListener('close', close)
     return () => {
       dialog.removeEventListener('close', close)
@@ -56,7 +58,7 @@ function JobDetails({ job, onClose }) {
   return (
     <dialog ref={dialogRef} className="details-dialog" aria-labelledby="job-details-title" onClick={(event) => event.target === event.currentTarget && onClose()} onCancel={(event) => { event.preventDefault(); onClose() }}>
       <div className="details-panel">
-        <div className="details-topline"><span className="eyebrow">SZCZEGÓŁY OFERTY</span><button className="icon-button" type="button" onClick={onClose} aria-label="Zamknij szczegóły"><X size={19} /></button></div>
+        <div className="details-topline"><span>Szczegóły oferty</span><button className="icon-button" type="button" onClick={onClose} aria-label="Zamknij szczegóły"><X size={19} /></button></div>
         <span className="details-city"><MapPin size={15} /> {job.city} · {job.source}</span>
         <h2 id="job-details-title">{job.title}</h2>
         <p className="details-company"><Building2 size={17} /> {job.company}</p>
@@ -70,11 +72,10 @@ function JobDetails({ job, onClose }) {
 }
 
 function Salary({ salary }) {
-  if (!salary) return <div className="salary-pill salary-hidden">STAWKA UKRYTA <span>sprawdź opis</span></div>
+  if (!salary) return <div className="salary-pill salary-hidden">Stawka ukryta</div>
   const amount = salary.display_label || [salary.minimum, salary.maximum].filter(Boolean).join('–')
   return (
     <div className="salary-pill">
-      <span className="salary-label">STAWKA</span>
       <strong>{amount}</strong>
     </div>
   )
@@ -82,9 +83,41 @@ function Salary({ salary }) {
 
 function JobCard({ job }) {
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [clamped, setClamped] = useState(false)
+  const descriptionId = useId()
+  const descriptionRef = useRef(null)
+  const description = job.description?.trim()
+  const summary = job.summary?.trim() || description || 'Brak krótkiego opisu. Otwórz szczegóły, aby sprawdzić ofertę.'
+  const hasMore = description && (description !== summary || clamped)
+  const missingStart = [description, summary].some((text) => /^(?:\.{3}|…)/.test(text || ''))
+  const missingEnd = /(?:\.{3}|…)$/.test(description || '')
+  const showFullOffer = (missingStart || missingEnd) && (expanded || !hasMore)
+  const safeUrl = missingStart || showFullOffer ? safeExternalUrl(job.url) : null
+  const offerUrl = showFullOffer ? safeUrl : null
+  const source = job.source?.trim().toLowerCase()
+  const isJooble = source === 'jooble' || [source, safeUrl && new URL(safeUrl).hostname]
+    .some((host) => host && /(?:^|\.)jooble\.org$/.test(host))
   const demo = job.source?.toLowerCase().includes('demo')
   const showDetails = () => setDetailsOpen(true)
   const closeDetails = useCallback(() => setDetailsOpen(false), [])
+
+  useLayoutEffect(() => {
+    const preview = descriptionRef.current
+    preview.scrollTop = 0
+    if (expanded || !description || description !== summary) return
+    const measure = () => setClamped(preview.scrollHeight > preview.clientHeight)
+    measure()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(preview)
+    window.addEventListener('resize', measure)
+    document.fonts?.addEventListener('loadingdone', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+      document.fonts?.removeEventListener('loadingdone', measure)
+    }
+  }, [description, expanded, summary])
 
   return (
     <>
@@ -92,23 +125,48 @@ function JobCard({ job }) {
         <div className="job-card-eyebrow">
           <span className="job-location"><MapPin size={15} />{job.city}</span>
           <span className={`source-label ${demo ? 'source-demo' : ''}`}>
-            {demo ? 'DEMO · DANE FIKCYJNE' : job.source}
+            {demo ? 'Demo · dane fikcyjne' : job.source}
           </span>
         </div>
         <Salary salary={job.salary} />
         <div className="job-title-area">
-          <span className="company-monogram" aria-hidden="true">{job.company?.trim()?.charAt(0)?.toUpperCase() || 'J'}</span>
           <div className="job-heading-copy">
             <h2>{job.title}</h2>
             <p><Building2 size={15} /> {job.company}</p>
           </div>
         </div>
         <JobTags tags={job.tags || []} />
-        <div className="job-summary-block">
-          <p>{job.summary || 'Brak krótkiego opisu. Otwórz szczegóły, aby sprawdzić ofertę.'}</p>
-          <button className="job-details-button" type="button" onClick={showDetails}>
-            <FileText size={15} /> Pełny opis i link do oferty <ArrowUpRight size={14} />
-          </button>
+        <div className="job-summary-block" data-no-swipe-drag>
+          {(missingStart || showFullOffer) && (
+            <div className="job-description-source-note">
+              {missingStart ? `Fragment ogłoszenia${isJooble ? ' z Jooble' : ''}` : 'Skrót od źródła'}
+              {showFullOffer && (
+                <> — {offerUrl
+                  ? <a href={offerUrl} target="_blank" rel="noopener noreferrer">pełny opis na stronie oferty</a>
+                  : 'pełny opis na stronie oferty'}</>
+              )}
+            </div>
+          )}
+          <p
+            id={descriptionId}
+            ref={descriptionRef}
+            className={expanded ? 'job-description-expanded' : 'job-description-preview'}
+            tabIndex={expanded ? 0 : undefined}
+            role={expanded ? 'region' : undefined}
+            aria-label={expanded ? 'Pełny opis oferty' : undefined}
+          >
+            {expanded ? description : summary}
+          </p>
+          {hasMore && (
+            <button className="job-description-toggle" type="button" aria-expanded={expanded} aria-controls={descriptionId} onClick={() => setExpanded(!expanded)}>
+              {expanded ? 'Pokaż mniej' : 'Pokaż więcej'}
+            </button>
+          )}
+          {!offerUrl && (
+            <button className="job-details-button" type="button" onClick={showDetails}>
+              <FileText size={15} /> Szczegóły oferty <ArrowUpRight size={14} />
+            </button>
+          )}
         </div>
       </div>
       {detailsOpen && <JobDetails job={job} onClose={closeDetails} />}
@@ -125,6 +183,7 @@ export default function SwipeDeck({ job, onSwipe, disabled }) {
 }
 
 function SwipeCard({ job, onSwipe, disabled }) {
+  const dragControls = useDragControls()
   const x = useMotionValue(0)
   const rotate = useTransform(x, [-260, 260], [-7, 7])
   const opacity = useTransform(x, [-560, -260, 260, 560], [0, 1, 1, 0])
@@ -185,6 +244,13 @@ function SwipeCard({ job, onSwipe, disabled }) {
       <motion.article
         className="job-card"
         drag={disabled || swiping ? false : 'x'}
+        dragControls={dragControls}
+        dragListener={false}
+        onPointerDown={(event) => {
+          if (!disabled && !isAnimating.current && !event.target.closest('button, a, dialog, [data-no-swipe-drag]')) {
+            dragControls.start(event)
+          }
+        }}
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.82}
         onDragEnd={onDragEnd}
@@ -193,17 +259,16 @@ function SwipeCard({ job, onSwipe, disabled }) {
         animate={{ y: 0, scale: 1 }}
         transition={{ duration: 0.18 }}
       >
-        <motion.div className="swipe-overlay swipe-reject" style={{ opacity: rejectOpacity }}>ODRZUĆ <X size={18} /></motion.div>
-        <motion.div className="swipe-overlay swipe-save" style={{ opacity: saveOpacity }}>ZAPISZ <Bookmark size={17} /></motion.div>
+        <motion.div className="swipe-overlay swipe-reject" style={{ opacity: rejectOpacity }} aria-hidden="true">ODRZUĆ</motion.div>
+        <motion.div className="swipe-overlay swipe-save" style={{ opacity: saveOpacity }} aria-hidden="true">ZAPISZ</motion.div>
         <JobCard job={job} />
       </motion.article>
       <div className="deck-controls">
-        <button className="deck-action action-dismiss" type="button" disabled={disabled || swiping} onClick={() => swipe(-1)} aria-label="Odrzuć tę ofertę">
-          <X size={24} strokeWidth={2.5} />
+        <button className="deck-action action-dismiss" type="button" disabled={disabled || swiping} onClick={() => swipe(-1)} aria-label="Odrzuć tę ofertę" aria-keyshortcuts="ArrowLeft" title="Odrzuć (←)">
+          <X size={18} aria-hidden="true" /> Odrzuć
         </button>
-        <p>← pomiń <span>·</span> zapisz →</p>
-        <button className="deck-action action-save" type="button" disabled={disabled || swiping} onClick={() => swipe(1)} aria-label="Zapisz tę ofertę">
-          <Bookmark size={22} strokeWidth={2.5} />
+        <button className="deck-action action-save" type="button" disabled={disabled || swiping} onClick={() => swipe(1)} aria-label="Zapisz tę ofertę" aria-keyshortcuts="ArrowRight" title="Zapisz (→)">
+          <Bookmark size={17} aria-hidden="true" /> Zapisz
         </button>
       </div>
     </>

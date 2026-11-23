@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, ChevronRight,
-  CircleHelp, Layers3, LockKeyhole, MapPin, RefreshCw, RotateCcw,
-  ShieldCheck, SlidersHorizontal, Sparkles,
+  AlertTriangle, ArrowLeft, Bookmark, BriefcaseBusiness, ChevronRight,
+  CircleHelp, LockKeyhole, MapPin, RefreshCw, RotateCcw, SlidersHorizontal,
 } from 'lucide-react'
 import FilterDrawer from './components/FilterDrawer'
 import MasterCvEditor from './components/MasterCvEditor'
@@ -15,13 +14,30 @@ import { DEFAULT_FILTERS, normalizeDismissedHashes, normalizeFilters, normalizeS
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
-function IconMark() {
-  return (
-    <span className="brand-mark" aria-hidden="true">
-      <span className="brand-card brand-card-back" />
-      <span className="brand-card brand-card-front"><Layers3 size={20} strokeWidth={2.5} /></span>
-    </span>
-  )
+const REFRESH_NOTICES = {
+  batch_complete: 'Odśwież ponownie, aby pobrać kolejną partię.',
+  complete: 'Wszystkie strony pobrane.',
+  busy: 'Import już trwa.',
+  rate_limited: 'Limit Jooble — spróbuj po północy UTC.',
+  daily_limit: 'Limit dzienny — spróbuj po północy UTC.',
+  access_denied: 'Jooble odmówił dostępu (HTTP 403).',
+  request_error: 'Import przerwany — odśwież, aby wznowić.',
+  refresh_error: 'Import przerwany — odśwież, aby wznowić.',
+}
+
+export function formatRefreshNotification(result) {
+  const status = result.jooble?.status
+  const importIssue = ['busy', 'rate_limited', 'daily_limit', 'access_denied', 'request_error', 'refresh_error'].includes(status)
+  const providerIssue = result.provider_errors?.length
+  const counts = `Dodano ${result.inserted}, zaktualizowano ${result.updated}; w bazie: ${result.total}.`
+  const reason = importIssue ? REFRESH_NOTICES[status]
+    : providerIssue ? 'Nie udało się odświeżyć części źródeł.'
+      : REFRESH_NOTICES[status]
+
+  return {
+    message: [counts, reason].filter(Boolean).join(' '),
+    type: providerIssue || importIssue ? 'error' : 'success',
+  }
 }
 
 function FilterSummary({ filters, onEdit }) {
@@ -34,8 +50,7 @@ function FilterSummary({ filters, onEdit }) {
 
   return (
     <aside className="sidebar-card filter-summary-card">
-      <span className="eyebrow">TWÓJ ZESTAW ZASAD</span>
-      <h2>Twój filtr<br />na ściemę<span>.</span></h2>
+      <h2>Aktywne filtry</h2>
       <div className="summary-city">
         <MapPin size={15} />
         <span>{filters.city || 'Cała Polska'}</span>
@@ -48,17 +63,12 @@ function FilterSummary({ filters, onEdit }) {
           {selected.length > 5 && <span className="summary-chip summary-chip-muted">+{selected.length - 5}</span>}
         </div>
       ) : <p className="summary-no-filters">Nie pomijamy żadnych branż ani wymagań.</p>}
-      <p className="salary-summary"><span className={filters.require_salary ? 'status-dot status-green' : 'status-dot'} />
+      <p className="salary-summary">
         {filters.require_salary ? 'Tylko oferty ze stawką' : 'Także bez podanej stawki'}
       </p>
       <button type="button" className="button-secondary summary-edit" onClick={onEdit}>
         <SlidersHorizontal size={15} /> Dostosuj filtry
       </button>
-      <div className="how-to-swipe">
-        <span className="eyebrow">JAK TO DZIAŁA</span>
-        <p><ArrowLeft size={14} /> W lewo — pomijasz</p>
-        <p><ArrowRight size={14} /> W prawo — zapisujesz</p>
-      </div>
     </aside>
   )
 }
@@ -66,14 +76,12 @@ function FilterSummary({ filters, onEdit }) {
 function PrivacyCard({ onResetHistory, dismissedCount, storageWarning }) {
   return (
     <section className="sidebar-card privacy-card">
-      <div className="privacy-icon"><ShieldCheck size={18} /></div>
-      <span className="eyebrow">TWOJE DANE, TWOJA SPRAWA</span>
-      <h3>Bez konta.<br />Bez śledzenia.</h3>
+      <h3>Prywatność</h3>
       <p>{storageWarning
         ? 'Nie udało się zapisać części zmian w przeglądarce. Mogą zniknąć po odświeżeniu.'
         : 'Zapisane oferty, filtry i Master CV są tylko na tym urządzeniu. Wysyłamy do backendu wyłącznie filtry i identyfikatory ofert już zapisanych lub pominiętych.'}</p>
       <div className="privacy-divider" />
-      <p className="ai-note"><Sparkles size={14} /> Prompt kopiujesz do własnego AI. Nie łączymy się z żadnym modelem.</p>
+      <p>Prompt kopiujesz do własnego AI. JobSwipe nie łączy się z żadnym modelem.</p>
       <button className="text-button history-reset" type="button" onClick={onResetHistory} disabled={!dismissedCount}>
         <RotateCcw size={14} /> Resetuj historię odrzuceń
       </button>
@@ -101,7 +109,6 @@ function NoJobs({ error, onRetry, onRefresh, onFilters, onResetHistory, dismisse
     return (
       <div className="empty-deck error-deck" role="alert">
         <span className="empty-icon"><CircleHelp size={22} /></span>
-        <span className="eyebrow">COŚ POSZŁO NIE TAK</span>
         <h2>Nie udało się pobrać ofert.</h2>
         <p>{error}</p>
         <button className="button-primary" type="button" onClick={onRetry}><RefreshCw size={16} /> Spróbuj ponownie</button>
@@ -111,9 +118,8 @@ function NoJobs({ error, onRetry, onRefresh, onFilters, onResetHistory, dismisse
   return (
     <div className="empty-deck">
       <span className="empty-icon"><BriefcaseBusiness size={22} /></span>
-      <span className="eyebrow">KONIEC TALII</span>
-      <h2>Na teraz to wszystko.</h2>
-      <p>Spróbuj zmienić filtry albo pobierz najnowsze oferty.</p>
+      <h2>Brak kolejnych ofert</h2>
+      <p>Zmień filtry lub odśwież listę.</p>
       <div className="empty-actions">
         <button className="button-primary" type="button" onClick={onFilters}><SlidersHorizontal size={15} /> Zmień filtry</button>
         <button className="button-secondary" type="button" onClick={onRefresh} disabled={refreshing}><RefreshCw size={15} /> Odśwież oferty</button>
@@ -176,18 +182,23 @@ function App() {
       setLoading(true)
       setError('')
       setHasMore(false)
-      const params = new URLSearchParams()
-      if (filters.city.trim()) params.set('city', filters.city.trim())
-      params.set('require_salary', String(filters.require_salary))
-      filters.blocked_tags.forEach((tag) => params.append('blocked_tags[]', tag))
-      filters.blocked_industries.forEach((industry) => params.append('blocked_industries[]', industry))
       const excluded = new Set([
         ...savedRef.current.map((job) => job.hash),
         ...dismissedRef.current,
       ])
-      excluded.forEach((hash) => params.append('exclude_hashes[]', hash))
       try {
-        const response = await fetch(`${API_BASE}/jobs?${params.toString()}`, { signal: controller.signal })
+        const response = await fetch(`${API_BASE}/jobs/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            city: filters.city.trim(),
+            require_salary: filters.require_salary,
+            blocked_tags: filters.blocked_tags,
+            blocked_industries: filters.blocked_industries,
+            exclude_hashes: [...excluded].filter((hash) => /^[0-9a-f]{16}$/.test(hash)),
+          }),
+          signal: controller.signal,
+        })
         if (!response.ok) throw new Error(`Serwer odpowiedział błędem ${response.status}.`)
         const result = await response.json()
         if (!Array.isArray(result)) throw new Error('Serwer zwrócił nieprawidłową listę ofert.')
@@ -251,14 +262,8 @@ function App() {
       if (!response.ok) throw new Error(`Odświeżenie zakończone błędem ${response.status}.`)
       const result = await response.json()
       setReloadToken((value) => value + 1)
-      const count = result.inserted + result.updated
-      const providerIssue = result.provider_errors?.length
-      notify(
-        providerIssue
-          ? `Zaktualizowano ${count} ofert. Część źródeł jest chwilowo niedostępna.`
-          : `Oferty odświeżone · ${count} dostępnych w bazie.`,
-        providerIssue ? 'error' : 'success',
-      )
+      const notification = formatRefreshNotification(result)
+      notify(notification.message, notification.type)
     } catch (refreshError) {
       notify(refreshError.message || 'Nie udało się odświeżyć ofert.', 'error')
     } finally {
@@ -304,13 +309,14 @@ function App() {
 
   const dismissCount = dismissed.length
   const frontJob = jobs[0]
+  const activeFilterCount = filters.blocked_tags.length + filters.blocked_industries.length
+    + Number(filters.require_salary) + Number(Boolean(filters.city))
 
   return (
     <div className="app-shell min-h-screen">
       <header className="topbar">
         <a className="brand" href="#home" aria-label="JobSwipe — strona główna" onClick={(event) => { event.preventDefault(); setActiveTab('discover') }}>
-          <IconMark />
-          <span className="brand-copy"><strong>JobSwipe</strong><small>MNIEJ SZUMU. WIĘCEJ PRACY.</small></span>
+          JobSwipe
         </a>
         <nav className="main-nav" aria-label="Główna nawigacja">
           <button className={`nav-tab ${activeTab === 'discover' ? 'active' : ''}`} type="button" aria-current={activeTab === 'discover' ? 'page' : undefined} onClick={() => setActiveTab('discover')}>
@@ -325,9 +331,9 @@ function App() {
             {storageFailures.length ? <AlertTriangle size={14} /> : <LockKeyhole size={14} />}
             {storageFailures.length ? 'Zapis lokalny niedostępny' : 'Twoje dane są lokalnie'}
           </span>
-          <button className="top-filter-button" type="button" onClick={() => setDrawerOpen(true)} aria-label="Otwórz filtry">
-            <SlidersHorizontal size={17} /><span>Filtry</span>
-            {(filters.blocked_tags.length + filters.blocked_industries.length + Number(filters.require_salary) + Number(!!filters.city)) > 0 && <i aria-label="Aktywne filtry" />}
+          <button className="top-filter-button" type="button" onClick={() => setDrawerOpen(true)} aria-label="Otwórz filtry" aria-description={`Aktywne filtry: ${activeFilterCount}`} title="Filtry">
+            <SlidersHorizontal size={17} aria-hidden="true" /><span className="filter-label">Filtry</span>
+            {activeFilterCount > 0 && <span className="filter-count" aria-hidden="true">{activeFilterCount}</span>}
           </button>
         </div>
       </header>
@@ -339,28 +345,20 @@ function App() {
         </div>
       )}
 
-      <section className="hero-section" id="home">
-        <div className="hero-copy">
-          <span className="hero-overline"><span className="hero-dot" /> PRACA DLA STUDENTÓW I NA START</span>
-          <h1>Twoja praca.<br /><span>Twoje zasady.</span></h1>
-          <p>Przesuń oferty, pomiń ściemę. Znajdź pracę, która pasuje do Ciebie.</p>
-        </div>
-        <div className="demo-indicator"><span className="demo-indicator-dot" /><span>WERSJA DEMO</span><small>fikcyjne przykładowe oferty</small></div>
-      </section>
-
       {activeTab === 'discover' ? (
-        <main className="discover-layout">
+        <main className="discover-layout" id="home">
           <FilterSummary filters={filters} onEdit={() => setDrawerOpen(true)} />
 
           <section className="discover-center" aria-label="Odkrywaj oferty pracy">
             <div className="deck-heading">
-              <div><span className="eyebrow">TWOJA TALIA</span><h2>Może coś dla Ciebie.</h2></div>
-              <button className="refresh-button" type="button" onClick={refreshListings} disabled={refreshing} aria-label="Odśwież oferty z backendu">
-                <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
-                <span>{refreshing ? 'Odświeżam…' : 'Odśwież'}</span>
+              <div>
+                <h1>Oferty pracy</h1>
+                <p>{loading ? 'Szukamy ofert…' : `W partii: ${jobs.length}${hasMore ? ' · kolejna automatycznie' : ''}`}</p>
+              </div>
+              <button className="refresh-button icon-button" type="button" onClick={refreshListings} disabled={refreshing} aria-label="Odśwież oferty z backendu" title="Odśwież oferty">
+                <RefreshCw size={18} className={refreshing ? 'spin' : ''} />
               </button>
             </div>
-            <div className="deck-count-row"><span>{loading ? 'Szukamy ofert…' : `${jobs.length} ${jobs.length === 1 ? 'oferta' : 'ofert'} w talii`}</span><span className="deck-tip"><ArrowDown size={13} /> Przeciągnij kartę, by zdecydować</span></div>
             {loading ? <LoadingCard /> : frontJob ? (
               <SwipeDeck job={frontJob} onSwipe={handleSwipe} disabled={loading} />
             ) : (
@@ -374,25 +372,19 @@ function App() {
                 refreshing={refreshing}
               />
             )}
-            <p className="keyboard-note"><kbd>←</kbd> pomiń <span>·</span> zapisz <kbd>→</kbd><span className="keyboard-note-extra"> · albo użyj przycisków</span></p>
-            {error && !loading && <button className="inline-retry" type="button" onClick={() => setReloadToken((value) => value + 1)}>Spróbuj pobrać ponownie</button>}
           </section>
 
           <aside className="right-sidebar">
-            <section className="sidebar-card saved-preview-card">
-              <div className="saved-preview-header"><span className="eyebrow">NA PÓŹNIEJ</span><Bookmark size={17} /></div>
-              <h3>{saved.length ? 'To już Twoje.' : 'Coś Cię zaciekawiło?'}</h3>
-              {saved.length ? (
-                <>
-                  <p className="saved-preview-count">{saved.length} zapisanych ofert</p>
-                  <div className="saved-preview-items">
-                    {saved.slice(0, 2).map((job) => <div className="saved-preview-job" key={job.hash}><span>{job.title}</span><small>{job.city}</small></div>)}
-                    {saved.length > 2 && <span className="preview-more">+{saved.length - 2} więcej</span>}
-                  </div>
-                  <button className="text-button preview-open" type="button" onClick={() => setActiveTab('saved')}>Zobacz zapisane <ChevronRight size={15} /></button>
-                </>
-              ) : <p>Przesuń kartę w prawo, żeby wrócić do niej później.</p>}
-            </section>
+            {saved.length > 0 && (
+              <section className="sidebar-card saved-preview-card">
+                <div className="saved-preview-header"><h3>Zapisane ({saved.length})</h3><Bookmark size={17} /></div>
+                <div className="saved-preview-items">
+                  {saved.slice(0, 2).map((job) => <div className="saved-preview-job" key={job.hash}><span>{job.title}</span><small>{job.city}</small></div>)}
+                  {saved.length > 2 && <span className="preview-more">+{saved.length - 2} więcej</span>}
+                </div>
+                <button className="text-button preview-open" type="button" onClick={() => setActiveTab('saved')}>Zobacz zapisane <ChevronRight size={15} /></button>
+              </section>
+            )}
 
             <MasterCvEditor id="master-cv-sidebar" value={masterCv} onChange={setMasterCv} saveStatus={cvStatus} />
             <PrivacyCard onResetHistory={clearDismissed} dismissedCount={dismissCount} storageWarning={storageFailures.length > 0} />
@@ -401,17 +393,12 @@ function App() {
       ) : (
         <main className="saved-page">
           <div className="saved-page-heading">
-            <div><span className="eyebrow">TWOJA LISTA</span><h2>Zapisane oferty<span>.</span></h2><p>Oferty zapisane lokalnie — na później, bez konta.</p></div>
+            <h1>Zapisane oferty</h1>
             <button className="button-secondary" type="button" onClick={() => setActiveTab('discover')}><ArrowLeft size={15} /> Wróć do odkrywania</button>
           </div>
           <SavedList jobs={saved} onRemove={removeSaved} onCopy={copyJobPrompt} />
         </main>
       )}
-
-      <footer className="site-footer">
-        <span><IconMark /> JobSwipe <i>·</i> mniej szumu, więcej pracy</span>
-        <span><LockKeyhole size={13} /> Konto nie jest potrzebne. Twoje CV nie opuszcza przeglądarki.</span>
-      </footer>
 
       <FilterDrawer
         open={drawerOpen}

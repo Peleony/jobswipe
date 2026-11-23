@@ -14,9 +14,8 @@ export default function SavedList({ jobs, onRemove, onCopy }) {
     return (
       <div className="saved-empty">
         <span className="empty-icon"><Bookmark size={23} /></span>
-        <span className="eyebrow">NA PÓŹNIEJ</span>
-        <h2>Tu trafiają oferty warte drugiego spojrzenia.</h2>
-        <p>Przesuń kartę w prawo albo wybierz zakładkę Odkrywaj i zapisz coś dla siebie.</p>
+        <h2>Nie masz zapisanych ofert</h2>
+        <p>Zapisz ofertę w zakładce Odkrywaj, aby wrócić do niej później.</p>
       </div>
     )
   }
@@ -28,7 +27,10 @@ export default function SavedList({ jobs, onRemove, onCopy }) {
         return (
           <article className="saved-card" key={job.hash}>
             <div className="saved-card-head">
-              <span className="saved-city"><MapPin size={14} /> {job.city}</span>
+              <div className="saved-location-row">
+                <span className="saved-city"><MapPin size={14} /> {job.city}</span>
+                {job.source?.toLowerCase().includes('demo') && <span className="saved-demo">Demo · dane fikcyjne</span>}
+              </div>
               <button className="icon-button saved-remove" type="button" onClick={() => onRemove(job)} aria-label={`Usuń ${job.title} z zapisanych`}>
                 <Trash2 size={17} />
               </button>
@@ -38,7 +40,6 @@ export default function SavedList({ jobs, onRemove, onCopy }) {
             <div className={job.salary ? 'saved-salary' : 'saved-salary salary-hidden-text'}>
               {job.salary?.display_label || 'Stawka ukryta'}
             </div>
-            {job.source?.toLowerCase().includes('demo') && <span className="saved-demo">DEMO · DANE FIKCYJNE</span>}
             {!!job.tags?.length && <div className="saved-tags">{job.tags.slice(0, 5).map((tag) => <span className={tag === 'brak_widelek' ? 'saved-tag-missing-salary' : ''} key={tag}>{TAG_LABELS[tag] || tag}</span>)}</div>}
             <p className="saved-summary">{job.summary || job.description}</p>
             <div className="saved-card-actions">

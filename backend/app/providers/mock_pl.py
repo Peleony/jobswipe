@@ -3,6 +3,8 @@ from urllib.parse import quote_plus
 from ..models import RawJob
 from .base import BaseJobProvider
 
+DEMO_SOURCE = "Demo — dane fikcyjne"
+
 
 class MockPLProvider(BaseJobProvider):
     name = "demo"
@@ -39,7 +41,7 @@ class MockPLProvider(BaseJobProvider):
                     city=city,
                     url=f"https://www.google.com/search?q={query}",
                     description=description,
-                    source="Demo — dane fikcyjne",
+                    source=DEMO_SOURCE,
                     salary_raw=salary,
                 )
             )
